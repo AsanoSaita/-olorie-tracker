@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Облачный Трекер Калорий (Темная тема)</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- Подключаем Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 16px; background: #000000; color: #f2f2f7; padding-bottom: 40px; }
+        .card { background: #1c1c1e; padding: 16px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); margin-bottom: 16px; border: 1px solid #2c2c2e; }
+        h2, h3, h4 { margin-top: 0; color: #ffffff; }
+        input, button, select { width: 100%; padding: 12px; margin: 6px 0; border-radius: 8px; border: 1px solid #3a3a3c; box-sizing: border-box; font-size: 16px; font-family: inherit; background: #2c2c2e; color: #ffffff; }
+        input::placeholder { color: #8e8e93; }
+        button { background: #0a84ff; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button.secondary { background: #30d158; }
+        ul { list-style: none; padding: 0; margin: 0; }
+        li { padding: 10px 0; border-bottom: 1px solid #2c2c2e; display: flex; justify-content: space-between; align-items: center; }
+        .date-control { display: flex; gap: 8px; align-items: center; }
+        .date-control input { margin: 0; }
+        .small-btn { width: auto; padding: 6px 12px; font-size: 14px; margin: 0; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .info-text { font-size: 14px; color: #aeaeb2; margin: 4px 0; }
+    </style>
+</head>
+<body>
+
+    <!-- Выбор профиля (из облака) -->
+    <div class="card" style="background: #111d2e; border: 1px solid #1f3a5f;">
+        <h3 style="color: #64b5f6;">👤 Выбор профиля</h3>
+        <select id="active-user" onchange="switchUser()">
+            <option value="user_1">Загрузка пользователей...</option>
+        </select>
+    </div>
+
+    <!-- Блок ИМТ и расчета калорий -->
+    <div class="card">
+        <h3>Параметры и Норма калорий</h3>
+        <div class="grid-2">
+            <div>
+                <label class="info-text">Рост (см)</label>
+                <input type="number" id="calc-height" value="175" onchange="updateProfileInCloud()">
+            </div>
+            <div>
+                <label class="info-text">Вес (кг)</label>
+                <input type="number" id="calc-weight" value="70" onchange="updateProfileInCloud()">
+            </div>
+        </div>
+        <div class="grid-2" style="margin-top: 6px;">
+            <div>
+                <label class="info-text">Возраст</label>
+                <input type="number" id="calc-age" value="20" onchange="updateProfileInCloud()">
+            </div>
+            <div>
+                <label class="info-text">Активность</label>
+                <select id="calc-activity" onchange="updateProfileInCloud()">
+                    <option value="1.2">Минимальная (сидячий)</option>
+                    <option value="1.375" selected>Низкая (1-3 тренировки)</option>
+                    <option value="1.55">Умеренная (3-5 тренировок)</option>
+                    <option value="1.725">Высокая</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top: 12px; background: #2c2c2e; padding: 12px; border-radius: 8px; border: 1px solid #3a3a3c;">
+            <p class="info-text">ИМТ: <b id="res-bmi" style="color: #fff;">0</b> (<span id="res-bmi-status" style="color: #fff;">-</span>)</p>
+            <p class="info-text">Поддержание веса: <b id="res-maintenance" style="color: #fff;">0</b> ккал</p>
+            <p class="info-text" style="color: #30d158; margin-top: 6px;"><b>Для похудения (-15%): <span id="res-deficit">0</span> ккал</b></p>
+        </div>
+    </div>
+
+    <!-- Дневной рацион -->
+    <div class="card">
+        <h3>Дневной рацион</h3>
+        <div class="date-control">
+            <input type="date" id="current-date" onchange="loadDayData()">
+            <button class="secondary small-btn" onclick="setToday()">Сегодня</button>
+        </div>
+        <h2 style="margin-top: 12px; margin-bottom: 0; color: #0a84ff;">Съедено: <span id="total-kcal">0</span> ккал</h2>
+    </div>
+
+    <!-- Добавить прием пищи -->
+    <div class="card">
+        <h3>Добавить приём пищи</h3>
+        <input type="text" id="food-name" placeholder="Название (например: Овсянка)">
+        <input type="number" id="food-kcal" placeholder="Калории (ккал)">
+        <button onclick="addFoodEntry()">Добавить в рацион</button>
+        <ul id="log-list" style="margin-top: 12px;"></ul>
+    </div>
+
+    <!-- Мои рецепты -->
+    <div class="card">
+        <h3>Облачные рецепты</h3>
+        <input type="text" id="recipe-name" placeholder="Название блюда">
+        <input type="number" id="recipe-kcal" placeholder="Калории на порцию / 100г">
+        <button onclick="saveRecipeToCloud()">Сохранить рецепт</button>
+        
+        <h4 style="margin: 12px 0 6px 0;">Быстрое добавление:</h4>
+        <ul id="recipe-list"></ul>
+    </div>
+
+    <script>
+        // --- НАСТРОЙКИ SUPABASE (Вставьте свои ключи) ---
+        const SUPABASE_URL = 'https://ergrqvictpjnkahkkbwv.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_DrThKmr1dvlepELqLWm0SQ_SQqmE1cm';
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentUserId = 'user_1';
+        
+        const dateInput = document.getElementById('current-date');
+        let selectedDate = new Date().toISOString().split('T')[0];
+        dateInput.value = selectedDate;
+
+        function setToday() {
+            selectedDate = new Date().toISOString().split('T')[0];
+            dateInput.value = selectedDate;
+            loadDayData();
+        }
+
+        async function initApp() {
+            await loadUsers();
+            await switchUser();
+        }
+
+        async function loadUsers() {
+            const { data, error } = await supabaseClient.from('profiles').select('*');
+            if (error) {
+                console.error('Ошибка загрузки профилей:', error);
+                return;
+            }
+            const select = document.getElementById('active-user');
+            select.innerHTML = '';
+            data.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.innerText = u.name;
+                select.appendChild(opt);
+            });
+        }
+
+        async function switchUser() {
+            currentUserId = document.getElementById('active-user').value;
+            await loadProfileData();
+            await loadDayData();
+            await loadRecipes();
+        }
+
+        async function loadProfileData() {
+            const { data, error } = await supabaseClient
+                .from('profiles')
+                .select('*')
+                .eq('id', currentUserId)
+                .single();
+
+            if (error || !data) return;
+
+            document.getElementById('calc-height').value = data.height;
+            document.getElementById('calc-weight').value = data.weight;
+            document.getElementById('calc-age').value = data.age;
+            document.getElementById('calc-activity').value = data.activity;
+            calculateMetricsLocally();
+        }
+
+        async function updateProfileInCloud() {
+            const height = parseFloat(document.getElementById('calc-height').value);
+            const weight = parseFloat(document.getElementById('calc-weight').value);
+            const age = parseInt(document.getElementById('calc-age').value);
+            const activity = parseFloat(document.getElementById('calc-activity').value);
+
+            calculateMetricsLocally();
+
+            await supabaseClient
+                .from('profiles')
+                .update({ height, weight, age, activity })
+                .eq('id', currentUserId);
+        }
+
+        function calculateMetricsLocally() {
+            const heightM = parseFloat(document.getElementById('calc-height').value) / 100;
+            const weight = parseFloat(document.getElementById('calc-weight').value);
+            const age = parseInt(document.getElementById('calc-age').value);
+            const activity = parseFloat(document.getElementById('calc-activity').value);
+
+            if (!heightM || !weight || !age) return;
+
+            const bmi = (weight / (heightM * heightM)).toFixed(1);
+            let bmiStatus = bmi < 18.5 ? 'Дефицит массы' : bmi < 25 ? 'Норма' : bmi < 30 ? 'Избыток' : 'Ожирение';
+
+            document.getElementById('res-bmi').innerText = bmi;
+            document.getElementById('res-bmi-status').innerText = bmiStatus;
+
+            const bmr = (10 * weight) + (6.25 * (heightM * 100)) - (5 * age) + 5;
+            const maintenance = Math.round(bmr * activity);
+            document.getElementById('res-maintenance').innerText = maintenance;
+            document.getElementById('res-deficit').innerText = Math.round(maintenance * 0.85) + ' ккал';
+        }
+
+        async function loadDayData() {
+            selectedDate = dateInput.value;
+            const { data, error } = await supabaseClient
+                .from('food_logs')
+                .select('*')
+                .eq('user_id', currentUserId)
+                .eq('log_date', selectedDate);
+
+            const list = document.getElementById('log-list');
+            list.innerHTML = '';
+            let total = 0;
+
+            if (error || !data) return;
+
+            data.forEach(item => {
+                total += item.kcal;
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${item.name}</span> <div><b style="color: #fff;">${item.kcal} ккал</b> <button class="small-btn" style="background:#ff453a; margin-left:8px;" onclick="deleteFoodEntry(${item.id})">X</button></div>`;
+                list.appendChild(li);
+            });
+            document.getElementById('total-kcal').innerText = total;
+        }
+
+        async function addFoodEntry() {
+            const nameInput = document.getElementById('food-name');
+            const kcalInput = document.getElementById('food-kcal');
+
+            if (!nameInput.value || !kcalInput.value) return;
+
+            await supabaseClient.from('food_logs').insert([{
+                user_id: currentUserId,
+                log_date: selectedDate,
+                name: nameInput.value,
+                kcal: parseInt(kcalInput.value)
+            }]);
+
+            nameInput.value = '';
+            kcalInput.value = '';
+            loadDayData();
+        }
+
+        async function deleteFoodEntry(id) {
+            await supabaseClient.from('food_logs').delete().eq('id', id);
+            loadDayData();
+        }
+
+        async function loadRecipes() {
+            const { data, error } = await supabaseClient
+                .from('recipes')
+                .select('*')
+                .eq('user_id', currentUserId);
+
+            const recipeList = document.getElementById('recipe-list');
+            recipeList.innerHTML = '';
+
+            if (error || !data || data.length === 0) {
+                recipeList.innerHTML = '<li style="color: #8e8e93; font-size: 14px; border:none;">Нет сохраненных рецептов</li>';
+                return;
+            }
+
+            data.forEach(recipe => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>${recipe.name} (<b style="color:#fff;">${recipe.kcal} ккал</b>)</span> <div><button class="secondary small-btn" onclick="addRecipeToLog('${recipe.name}', ${recipe.kcal})">+</button> <button class="small-btn" style="background:#ff453a; margin-left:4px;" onclick="deleteRecipe(${recipe.id})">X</button></div>`;
+                recipeList.appendChild(li);
+            });
+        }
+
+        async function saveRecipeToCloud() {
+            const nameInput = document.getElementById('recipe-name');
+            const kcalInput = document.getElementById('recipe-kcal');
+
+            if (!nameInput.value || !kcalInput.value) return;
+
+            await supabaseClient.from('recipes').insert([{
+                user_id: currentUserId,
+                name: nameInput.value,
+                kcal: parseInt(kcalInput.value)
+            }]);
+
+            nameInput.value = '';
+            kcalInput.value = '';
+            loadRecipes();
+        }
+
+        async function deleteRecipe(id) {
+            await supabaseClient.from('recipes').delete().eq('id', id);
+            loadRecipes();
+        }
+
+        async function addRecipeToLog(name, kcal) {
+            await supabaseClient.from('food_logs').insert([{
+                user_id: currentUserId,
+                log_date: selectedDate,
+                name: name,
+                kcal: kcal
+            }]);
+            loadDayData();
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
